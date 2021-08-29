@@ -12,9 +12,6 @@ const int servo_pin = 3;
 const int button_pin = 2;
 const int led_pin = 12;
 
-boolean b_set_password = false;
-boolean b_reset = false;
-
 /*
     평소에는 LCD off 상태
     시작 : '*' 입력
@@ -27,7 +24,6 @@ boolean b_reset = false;
 class DoorLock : public MiniCom
 {
 public:
-    DoorLock(long serial_bps=115200, int lcd_addr=0x27);
 
     void Init();
     void Run();
@@ -36,11 +32,16 @@ public:
     void StartGetInput();
     void ResetInput();
     void EndChangePassword();
+    boolean IsSetMode();
+    void SwitchSetMode();
 
     void Tick();
     void Tick(int n);
 
+    static DoorLock* GetInstance(long serial_bps=115200, int lcd_addr=0x27);
+
 protected:
+    static DoorLock* instance;
     String password_ = "";
     Servo servo_lock_;
     Button btn_{button_pin};
@@ -49,11 +50,15 @@ protected:
     String input_ = "";
     String inputStar_ = "";
     boolean b_input_ = false;
-    boolean b_set_password_old_ = false;
+    boolean b_set_password_ = false;
 
     Led beep_{led_pin};
     int timer_id_ = -1;
     int wrong_time_ = 0;
+
+private:
+    DoorLock(long serial_bps=115200, int lcd_addr=0x27);
+    ~DoorLock();
 };
 
 void SwitchBSetPassword();

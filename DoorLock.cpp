@@ -2,9 +2,23 @@
 
 const int base_address = 100; // 비밀번호 저장 EEPROM 주소
 
+DoorLock* DoorLock::instance = NULL;
+
 DoorLock::DoorLock(long serial_bps, int lcd_addr)
 : MiniCom(serial_bps, lcd_addr)
 {}
+
+DoorLock::~DoorLock()
+{
+    delete instance;   
+}
+
+DoorLock* DoorLock::GetInstance(long serial_bps, int lcd_addr)
+{
+    if (instance == NULL)
+        instance = new DoorLock(serial_bps, lcd_addr);
+    return instance;
+}
 
 void DoorLock::Init()
 {
@@ -20,24 +34,8 @@ void DoorLock::Init()
 void DoorLock::Run()
 {
     MiniCom::run();
-
-    // 타이머 감지
-    if (b_reset)
-    {
-        ResetInput();
-        Tick(2);
-        b_reset = false;
-    }
-
-    // 비밀번호 변경 모드
     btn_.check();
-    if (b_set_password && b_set_password_old_ == false)
-        StartGetInput();
-    else if (b_set_password == false && b_set_password_old_)
-        EndChangePassword();
-    b_set_password_old_ = b_set_password;
 
-    // 키패드 입력 감지
     if (char key = keypad_.getKey())
         Process(key);
 }
@@ -51,7 +49,7 @@ void DoorLock::Process(char key)
     }
     else if (key == '#' && b_input_)
     {
-        if (b_set_password == false)
+        if (b_set_password_ == false)
         {
             timer.deleteTimer(timer_id_);
             timer_id_ = -1;
@@ -60,11 +58,14 @@ void DoorLock::Process(char key)
             offLcd();
         }
         else
-            b_set_password = !b_set_password;
+        {
+            b_set_password_ = !b_set_password_;
+            EndChangePassword();
+        }
     }
     else if (b_input_)
     {
-        if (!b_set_password)
+        if (!b_set_password_)
             timer.restartTimer(timer_id_);
         input_ += key;
         inputStar_ += '*';
@@ -143,10 +144,29 @@ void DoorLock::EndChangePassword()
 
 void SwitchBSetPassword()
 {
-    b_set_password = !b_set_password;
+    auto& doorlock = *DoorLock::GetInstance();
+
+    doorlock.SwitchSetMode();
+    if (doorlock.IsSetMode())
+        doorlock.StartGetInput();
+    else
+        doorlock.EndChangePassword();
 }
 
 void SetResetFlag()
 {
-    b_reset = true;
+    auto& doorlock = *DoorLock::GetInstance();
+
+    doorlock.ResetInput();
+    doorlock.Tick(2);
+}
+
+boolean DoorLock::IsSetMode()
+{
+    return b_set_password_;
+}
+
+void DoorLock::SwitchSetMode()
+{
+    b_set_password_ = !b_set_password_;
 }
