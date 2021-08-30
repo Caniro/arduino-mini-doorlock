@@ -8,9 +8,9 @@
 #include <Servo.h>
 #include "Keymap.h"
 
-const int servo_pin = 3;
-const int button_pin = 2;
-const int led_pin = 12;
+const int kServoPin = 3;    // 서보모터 핀 번호
+const int kButtonPin = 2;   // 비밀번호 설정 버튼 핀 번호
+const int kLedPin = 12;     // led 및 부저 핀 번호
 
 /*
     평소에는 LCD off 상태
@@ -24,6 +24,8 @@ const int led_pin = 12;
 class DoorLock : public MiniCom
 {
 public:
+    static DoorLock* GetInstance(long serial_bps=115200, \
+                                int lcd_addr=0x27);
 
     void Init();
     void Run();
@@ -38,21 +40,20 @@ public:
     void Tick();
     void Tick(int n);
 
-    static DoorLock* GetInstance(long serial_bps=115200, int lcd_addr=0x27);
-
 protected:
-    static DoorLock* instance;
+    static DoorLock* instance_;
     String password_ = "";
     Servo servo_lock_;
-    Button btn_{button_pin};
+    Button btn_{kButtonPin};
 
-    Keypad keypad_{makeKeymap(keys_4x4), row_pins, col_pins, KEY_ROWS, KEY_COLS};
+    Keypad keypad_{makeKeymap(keys_4x4), row_pins, \
+                    col_pins, KEY_ROWS, KEY_COLS};
     String input_ = "";
-    String inputStar_ = "";
-    boolean b_input_ = false;
-    boolean b_set_password_ = false;
+    String input_star_ = "";
+    boolean input_mode_ = false;
+    boolean set_password_mode_ = false;
 
-    Led beep_{led_pin};
+    Led beep_{kLedPin};
     int timer_id_ = -1;
     int wrong_time_ = 0;
 
@@ -61,5 +62,5 @@ private:
     ~DoorLock();
 };
 
-void SwitchBSetPassword();
-void SetResetFlag();
+void SetPassword();
+void DoReset();

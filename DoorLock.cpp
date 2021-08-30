@@ -1,8 +1,8 @@
 #include "DoorLock.h"
 
-const int base_address = 100; // 비밀번호 저장 EEPROM 주소
+const int kBaseAddress = 100; // 비밀번호 저장 EEPROM 주소
 
-DoorLock* DoorLock::instance = NULL;
+DoorLock* DoorLock::instance_ = NULL;
 
 DoorLock::DoorLock(long serial_bps, int lcd_addr)
 : MiniCom(serial_bps, lcd_addr)
@@ -10,14 +10,14 @@ DoorLock::DoorLock(long serial_bps, int lcd_addr)
 
 DoorLock::~DoorLock()
 {
-    delete instance;   
+    delete instance_;
 }
 
 DoorLock* DoorLock::GetInstance(long serial_bps, int lcd_addr)
 {
-    if (instance == NULL)
-        instance = new DoorLock(serial_bps, lcd_addr);
-    return instance;
+    if (instance_ == NULL)
+        instance_ = new DoorLock(serial_bps, lcd_addr);
+    return instance_;
 }
 
 void DoorLock::Init()
@@ -25,10 +25,10 @@ void DoorLock::Init()
     MiniCom::init();
     offLcd();
     print(0, "[[Door Lock]]");
-    password_ = readRom(base_address);
-    servo_lock_.attach(servo_pin);
+    password_ = readRom(kBaseAddress);
+    servo_lock_.attach(kServoPin);
     servo_lock_.write(0);
-    btn_.setCallback(SwitchBSetPassword);
+    btn_.setCallback(SetPassword);
 }
 
 void DoorLock::Run()
@@ -42,36 +42,35 @@ void DoorLock::Run()
 
 void DoorLock::Process(char key)
 {
-    if (key == '*' && b_input_ == false)
+    if (key == '*' && input_mode_ == false)
     {
         StartGetInput();
-        timer_id_ = timer.setTimeout(3000, SetResetFlag);
+        timer_id_ = timer.setTimeout(3000, DoReset);
     }
-    else if (key == '#' && b_input_)
+    else if (key == '#' && input_mode_)
     {
-        if (b_set_password_ == false)
+        if (!IsSetMode())
         {
             timer.deleteTimer(timer_id_);
             timer_id_ = -1;
-            b_input_ = false;
+            input_mode_ = false;
             Check();
-            offLcd();
         }
         else
         {
-            b_set_password_ = !b_set_password_;
+            SwitchSetMode();
             EndChangePassword();
         }
     }
-    else if (b_input_)
+    else if (input_mode_)
     {
-        if (!b_set_password_)
+        if (!IsSetMode())
             timer.restartTimer(timer_id_);
         input_ += key;
-        inputStar_ += '*';
+        input_star_ += '*';
         Tick();
     }
-    print(1, inputStar_.c_str());
+    print(1, input_star_.c_str());
 }
 
 void DoorLock::Check()
@@ -86,38 +85,57 @@ void DoorLock::Check()
     }
     else
     {
-        inputStar_ = "";
+        input_star_ = "";
         ++wrong_time_;
         onLcd();
         print(1, "wrong count: ", wrong_time_);
         Tick(3);
         delay(500);
-        print(1, "wait for 10min");
-        offLcd();
         if (wrong_time_ >= 3)
         {
+            print(1, "wait for 10min");
+            delay(500);
+            offLcd();
             delay((unsigned long)10 * 60 * 1000); // 10분 정지
             wrong_time_ = 0;
         }
     }
+    offLcd();
 }
 
 void DoorLock::StartGetInput()
 {
-    b_input_ = true;
+    input_mode_ = true;
     input_ = "";
-    inputStar_ = "";
+    input_star_ = "";
     onLcd();
     Tick();
 }
 
 void DoorLock::ResetInput()
 {
-    b_input_ = false;
+    input_mode_ = false;
     input_ = "";
-    inputStar_ = "";
+    input_star_ = "";
     offLcd();
-    print(1, inputStar_.c_str());
+    print(1, input_star_.c_str());
+}
+
+void DoorLock::EndChangePassword()
+{
+    password_ = input_;
+    writeRom(kBaseAddress, input_);
+    ResetInput();
+}
+
+boolean DoorLock::IsSetMode()
+{
+    return set_password_mode_;
+}
+
+void DoorLock::SwitchSetMode()
+{
+    set_password_mode_ = !set_password_mode_;
 }
 
 void DoorLock::Tick()
@@ -134,15 +152,7 @@ void DoorLock::Tick(int n)
         Tick();
 }
 
-void DoorLock::EndChangePassword()
-{
-    password_ = input_;
-    writeRom(base_address, input_);
-    delay(100);
-    ResetInput();
-}
-
-void SwitchBSetPassword()
+void SetPassword()
 {
     auto& doorlock = *DoorLock::GetInstance();
 
@@ -153,20 +163,10 @@ void SwitchBSetPassword()
         doorlock.EndChangePassword();
 }
 
-void SetResetFlag()
+void DoReset()
 {
     auto& doorlock = *DoorLock::GetInstance();
 
     doorlock.ResetInput();
     doorlock.Tick(2);
-}
-
-boolean DoorLock::IsSetMode()
-{
-    return b_set_password_;
-}
-
-void DoorLock::SwitchSetMode()
-{
-    b_set_password_ = !b_set_password_;
 }
